@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -32,6 +33,52 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
 	// TODO: implement the upload here
+	const max_memory = 10 << 20
+	r.ParseMultipartForm(max_memory)
 
-	respondWithJSON(w, http.StatusOK, struct{}{})
+	file, header, err := r.FormFile("thumbnail")
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to parse form file", err)
+		return
+	}
+	defer file.Close()
+
+	mediaType := header.Header.Get("Content-Type")
+	if mediaType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type", err)
+		return
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to read file", err)
+		return
+	}
+
+	videoMetaData, err := cfg.db.GetVideo(videoID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Couldn't find video ID", err)
+		return
+	}
+	if videoMetaData.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "", err)
+		return
+	}
+	
+	newThumbnail := thumbnail{
+		data: data,
+		mediaType: mediaType,
+	}
+	videoThumbnails[videoID] = newThumbnail
+
+	thumbnailUrl := "http://localhost:" + cfg.port + "/api/thumbnails/" + videoIDString
+	videoMetaData.ThumbnailURL = &thumbnailUrl	
+
+	err = cfg.db.UpdateVideo(videoMetaData)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, videoMetaData)
 }
