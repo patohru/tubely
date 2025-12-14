@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/patohru/tubely/internal/database"
 	"github.com/google/uuid"
+	"github.com/patohru/tubely/internal/database"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"

@@ -29,7 +29,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
 	// TODO: implement the upload here
@@ -64,15 +63,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "", err)
 		return
 	}
-	
+
 	newThumbnail := thumbnail{
-		data: data,
+		data:      data,
 		mediaType: mediaType,
 	}
 	videoThumbnails[videoID] = newThumbnail
 
 	thumbnailUrl := "http://localhost:" + cfg.port + "/api/thumbnails/" + videoIDString
-	videoMetaData.ThumbnailURL = &thumbnailUrl	
+	videoMetaData.ThumbnailURL = &thumbnailUrl
 
 	err = cfg.db.UpdateVideo(videoMetaData)
 	if err != nil {
