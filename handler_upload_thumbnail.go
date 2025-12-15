@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/patohru/tubely/internal/auth"
@@ -31,10 +33,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// TODO: implement the upload here
-	const max_memory = 10 << 20
-	r.ParseMultipartForm(max_memory)
-
 	file, header, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to parse form file", err)
@@ -42,15 +40,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
-	if mediaType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing Content-Type", err)
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Missing Content-Type", err)
 		return
 	}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to read file", err)
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
 		return
 	}
 
@@ -64,13 +61,21 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	newThumbnail := thumbnail{
-		data:      data,
-		mediaType: mediaType,
-	}
-	videoThumbnails[videoID] = newThumbnail
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
-	thumbnailUrl := "http://localhost:" + cfg.port + "/api/thumbnails/" + videoIDString
+	dst, err := os.Create(assetDiskPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create new file", err)
+		return
+	}
+	defer dst.Close()
+
+	if _, err = io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "", err)
+		return
+	}
+	thumbnailUrl := cfg.getAssetURL(assetPath)
 	videoMetaData.ThumbnailURL = &thumbnailUrl
 
 	err = cfg.db.UpdateVideo(videoMetaData)
