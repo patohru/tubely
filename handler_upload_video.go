@@ -79,11 +79,26 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	io.Copy(tempVideo, file)
 	tempVideo.Seek(0, io.SeekStart)
 
+	aspectRatio, err := getVideoAspectRatio(tempVideo.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Missing file", err)
+		return
+	}
+
+	var aspect string
+	if aspectRatio == "16:9" {
+		aspect = "landscape"
+	} else if aspectRatio == "9:16" {
+		aspect = "portrait"
+	} else {
+		aspect = "other"
+	}
+
 	randomKey := make([]byte, 32)
 	rand.Read(randomKey)
 
 	randomVideoID := base64.RawURLEncoding.EncodeToString(randomKey)
-	videoFileName := getAssetPath(randomVideoID, mediaType)
+	videoFileName := fmt.Sprintf("%s/%s", aspect, getAssetPath(randomVideoID, mediaType))
 
 	s3BucketParams := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
