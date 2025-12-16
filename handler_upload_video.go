@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -79,7 +80,18 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	io.Copy(tempVideo, file)
 	tempVideo.Seek(0, io.SeekStart)
 
-	aspectRatio, err := getVideoAspectRatio(tempVideo.Name())
+	processedVideoPath, err := processVideoForFastStart(tempVideo.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Missing file path", err)
+		return
+	}
+	processedVideo, err := os.ReadFile(processedVideoPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "", err)
+		return
+	}
+
+	aspectRatio, err := getVideoAspectRatio(processedVideoPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Missing file", err)
 		return
@@ -104,7 +116,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	s3BucketParams := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &videoFileName,
-		Body:        tempVideo,
+		Body:        bytes.NewReader(processedVideo),
 		ContentType: &mediaType,
 	}
 
